@@ -35,6 +35,7 @@
 #include "items.h"
 #include "monster.h"
 #include "movement.h"
+#include "playercachemanager.h"
 #include "scheduler.h"
 #include "server.h"
 #include "spells.h"
@@ -55,6 +56,7 @@ extern Monsters g_monsters;
 extern MoveEvents* g_moveEvents;
 extern Weapons* g_weapons;
 extern Scripts* g_scripts;
+extern PlayerCacheManager g_playerCacheManager;
 
 Game::Game()
 {
@@ -148,6 +150,7 @@ void Game::setGameState(GameState_t newState)
 			g_scheduler.stop();
 			g_databaseTasks.stop();
 			g_dispatcher.stop();
+			g_playerCacheManager.stop();
 			break;
 		}
 
@@ -4536,6 +4539,7 @@ void Game::shutdown()
 	g_scheduler.shutdown();
 	g_databaseTasks.shutdown();
 	g_dispatcher.shutdown();
+	g_playerCacheManager.shutdown();
 	map.spawns.clear();
 	raids.clear();
 

@@ -34,12 +34,14 @@
 #include "databasemanager.h"
 #include "scheduler.h"
 #include "databasetasks.h"
+#include "playercachemanager.h"
 #include "script.h"
 #include <fstream>
 
 DatabaseTasks g_databaseTasks;
 Dispatcher g_dispatcher;
 Scheduler g_scheduler;
+PlayerCacheManager g_playerCacheManager;
 
 Game g_game;
 ConfigManager g_config;
@@ -90,11 +92,13 @@ int main(int argc, char* argv[])
 		g_scheduler.shutdown();
 		g_databaseTasks.shutdown();
 		g_dispatcher.shutdown();
+		g_playerCacheManager.shutdown();
 	}
 
 	g_scheduler.join();
 	g_databaseTasks.join();
 	g_dispatcher.join();
+	g_playerCacheManager.join();
 	return 0;
 }
 
@@ -182,6 +186,7 @@ void mainLoader(int, char*[], ServiceManager* services)
 		return;
 	}
 	g_databaseTasks.start();
+	g_playerCacheManager.start();
 
 	DatabaseManager::updateDatabase();
 

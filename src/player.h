@@ -249,6 +249,10 @@ class Player final : public Creature, public Cylinder
 			return inbox;
 		}
 
+		void setInbox(Inbox* newInbox) {
+			inbox = newInbox;
+		}
+
 		uint16_t getClientIcons() const;
 
 		const GuildWarVector& getGuildWarVector() const {
@@ -505,6 +509,12 @@ class Player final : public Creature, public Cylinder
 		void removeConditionSuppressions(uint32_t conditions);
 
 		DepotChest* getDepotChest(uint32_t depotId, bool autoCreate);
+		std::map<uint32_t, DepotChest*> getDepotChests() {
+			return depotChests;
+		}
+		void setDepotChests(std::map<uint32_t, DepotChest*> newDepotChests) {
+			depotChests = newDepotChests;
+		}
 		DepotLocker* getDepotLocker(uint32_t depotId);
 		void onReceiveMail() const;
 		bool isNearDepotBox() const;
@@ -1350,6 +1360,7 @@ class Player final : public Creature, public Cylinder
 		friend class Actions;
 		friend class IOLoginData;
 		friend class ProtocolGame;
+		friend class PlayerCacheData;
 };
 
 #endif

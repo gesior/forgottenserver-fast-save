@@ -22,9 +22,11 @@
 #include "iologindata.h"
 #include "configmanager.h"
 #include "game.h"
+#include "playercachemanager.h"
 
 extern ConfigManager g_config;
 extern Game g_game;
+extern PlayerCacheManager g_playerCacheManager;
 
 Account IOLoginData::loadAccount(uint32_t accno)
 {
@@ -76,6 +78,7 @@ std::string decodeSecret(const std::string& secret)
 			left -= 8;
 			key.push_back(static_cast<char>(buffer >> left));
 		}
+
 	}
 
 	return key;
@@ -86,7 +89,7 @@ bool IOLoginData::loginserverAuthentication(const std::string& name, const std::
 	Database& db = Database::getInstance();
 
 	std::ostringstream query;
-	query << "SELECT `id`, `name`, `password`, `secret`, `type`, `premdays`, `lastday` FROM `accounts` WHERE `name` = " << db.escapeString(name);
+	query << "SELECT `id`, `name`, `password`,  `secret`, `type`, `premdays`, `lastday` FROM `accounts` WHERE `name` = " << db.escapeString(name);
 	DBResult_ptr result = db.storeQuery(query.str());
 	if (!result) {
 		return false;
@@ -104,7 +107,7 @@ bool IOLoginData::loginserverAuthentication(const std::string& name, const std::
 	account.lastDay = result->getNumber<time_t>("lastday");
 
 	query.str(std::string());
-	query << "SELECT `name`, `deletion` FROM `players` WHERE `account_id` = " << account.id;
+	query << "SELECT `name`,  `deletion` FROM `players` WHERE `account_id` = " << account.id;
 	result = db.storeQuery(query.str());
 	if (result) {
 		do {
@@ -451,94 +454,102 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 		} while (result->next());
 	}
 
-	//load inventory items
-	ItemMap itemMap;
 
-	query.str(std::string());
-	query << "SELECT `pid`, `sid`, `itemtype`, `count`, `attributes` FROM `player_items` WHERE `player_id` = " << player->getGUID() << " ORDER BY `sid` DESC";
-	if ((result = db.storeQuery(query.str()))) {
-		loadItems(itemMap, result);
+	if (!g_playerCacheManager.loadCachedPlayer(player->getGUID(), player)) {
+		//load inventory items
+		ItemMap itemMap;
 
-		for (ItemMap::const_reverse_iterator it = itemMap.rbegin(), end = itemMap.rend(); it != end; ++it) {
-			const std::pair<Item*, int32_t>& pair = it->second;
-			Item* item = pair.first;
-			int32_t pid = pair.second;
-			if (pid >= 1 && pid <= 10) {
-				player->internalAddThing(pid, item);
-			} else {
-				ItemMap::const_iterator it2 = itemMap.find(pid);
-				if (it2 == itemMap.end()) {
-					continue;
+		query.str(std::string());
+		query << "SELECT `pid`, `sid`, `itemtype`, `count`, `attributes` FROM `player_items` WHERE `player_id` = " << player->getGUID() << " ORDER BY `sid` DESC";
+		if ((result = db.storeQuery(query.str()))) {
+			loadItems(itemMap, result);
+
+			for (ItemMap::const_reverse_iterator it = itemMap.rbegin(), end = itemMap.rend(); it != end; ++it) {
+				const std::pair<Item*, int32_t>& pair = it->second;
+				Item* item = pair.first;
+				int32_t pid = pair.second;
+				if (pid >= 1 && pid <= 10) {
+					player->internalAddThing(pid, item);
 				}
+				else {
+					ItemMap::const_iterator it2 = itemMap.find(pid);
+					if (it2 == itemMap.end()) {
+						continue;
+					}
 
-				Container* container = it2->second.first->getContainer();
-				if (container) {
-					container->internalAddThing(item);
-				}
-			}
-		}
-	}
-
-	//load depot items
-	itemMap.clear();
-
-	query.str(std::string());
-	query << "SELECT `pid`, `sid`, `itemtype`, `count`, `attributes` FROM `player_depotitems` WHERE `player_id` = " << player->getGUID() << " ORDER BY `sid` DESC";
-	if ((result = db.storeQuery(query.str()))) {
-		loadItems(itemMap, result);
-
-		for (ItemMap::const_reverse_iterator it = itemMap.rbegin(), end = itemMap.rend(); it != end; ++it) {
-			const std::pair<Item*, int32_t>& pair = it->second;
-			Item* item = pair.first;
-
-			int32_t pid = pair.second;
-			if (pid >= 0 && pid < 100) {
-				DepotChest* depotChest = player->getDepotChest(pid, true);
-				if (depotChest) {
-					depotChest->internalAddThing(item);
-				}
-			} else {
-				ItemMap::const_iterator it2 = itemMap.find(pid);
-				if (it2 == itemMap.end()) {
-					continue;
-				}
-
-				Container* container = it2->second.first->getContainer();
-				if (container) {
-					container->internalAddThing(item);
+					Container* container = it2->second.first->getContainer();
+					if (container) {
+						container->internalAddThing(item);
+					}
 				}
 			}
 		}
-	}
 
-	//load inbox items
-	itemMap.clear();
+		//load depot items
+		itemMap.clear();
 
-	query.str(std::string());
-	query << "SELECT `pid`, `sid`, `itemtype`, `count`, `attributes` FROM `player_inboxitems` WHERE `player_id` = " << player->getGUID() << " ORDER BY `sid` DESC";
-	if ((result = db.storeQuery(query.str()))) {
-		loadItems(itemMap, result);
+		query.str(std::string());
+		query << "SELECT `pid`, `sid`, `itemtype`, `count`, `attributes` FROM `player_depotitems` WHERE `player_id` = " << player->getGUID() << " ORDER BY `sid` DESC";
+		if ((result = db.storeQuery(query.str()))) {
+			loadItems(itemMap, result);
 
-		for (ItemMap::const_reverse_iterator it = itemMap.rbegin(), end = itemMap.rend(); it != end; ++it) {
-			const std::pair<Item*, int32_t>& pair = it->second;
-			Item* item = pair.first;
-			int32_t pid = pair.second;
+			for (ItemMap::const_reverse_iterator it = itemMap.rbegin(), end = itemMap.rend(); it != end; ++it) {
+				const std::pair<Item*, int32_t>& pair = it->second;
+				Item* item = pair.first;
 
-			if (pid >= 0 && pid < 100) {
-				player->getInbox()->internalAddThing(item);
-			} else {
-				ItemMap::const_iterator it2 = itemMap.find(pid);
-
-				if (it2 == itemMap.end()) {
-					continue;
+				int32_t pid = pair.second;
+				if (pid >= 0 && pid < 100) {
+					DepotChest* depotChest = player->getDepotChest(pid, true);
+					if (depotChest) {
+						depotChest->internalAddThing(item);
+					}
 				}
+				else {
+					ItemMap::const_iterator it2 = itemMap.find(pid);
+					if (it2 == itemMap.end()) {
+						continue;
+					}
 
-				Container* container = it2->second.first->getContainer();
-				if (container) {
-					container->internalAddThing(item);
+					Container* container = it2->second.first->getContainer();
+					if (container) {
+						container->internalAddThing(item);
+					}
 				}
 			}
 		}
+
+		//load inbox items
+		itemMap.clear();
+
+		query.str(std::string());
+		query << "SELECT `pid`, `sid`, `itemtype`, `count`, `attributes` FROM `player_inboxitems` WHERE `player_id` = " << player->getGUID() << " ORDER BY `sid` DESC";
+		if ((result = db.storeQuery(query.str()))) {
+			loadItems(itemMap, result);
+
+			for (ItemMap::const_reverse_iterator it = itemMap.rbegin(), end = itemMap.rend(); it != end; ++it) {
+				const std::pair<Item*, int32_t>& pair = it->second;
+				Item* item = pair.first;
+				int32_t pid = pair.second;
+
+				if (pid >= 0 && pid < 100) {
+					player->getInbox()->internalAddThing(item);
+				}
+				else {
+					ItemMap::const_iterator it2 = itemMap.find(pid);
+
+					if (it2 == itemMap.end()) {
+						continue;
+					}
+
+					Container* container = it2->second.first->getContainer();
+					if (container) {
+						container->internalAddThing(item);
+					}
+				}
+			}
+		}
+
+		g_playerCacheManager.cachePlayer(player->getGUID(), player);
 	}
 
 	//load storage map
@@ -773,67 +784,7 @@ bool IOLoginData::savePlayer(Player* player)
 		return false;
 	}
 
-	//item saving
-	query << "DELETE FROM `player_items` WHERE `player_id` = " << player->getGUID();
-	if (!db.executeQuery(query.str())) {
-		return false;
-	}
-
-	DBInsert itemsQuery("INSERT INTO `player_items` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
-
-	ItemBlockList itemList;
-	for (int32_t slotId = 1; slotId <= 10; ++slotId) {
-		Item* item = player->inventory[slotId];
-		if (item) {
-			itemList.emplace_back(slotId, item);
-		}
-	}
-
-	if (!saveItems(player, itemList, itemsQuery, propWriteStream)) {
-		return false;
-	}
-
-	if (player->lastDepotId != -1) {
-		//save depot items
-		query.str(std::string());
-		query << "DELETE FROM `player_depotitems` WHERE `player_id` = " << player->getGUID();
-
-		if (!db.executeQuery(query.str())) {
-			return false;
-		}
-
-		DBInsert depotQuery("INSERT INTO `player_depotitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
-		itemList.clear();
-
-		for (const auto& it : player->depotChests) {
-			DepotChest* depotChest = it.second;
-			for (Item* item : depotChest->getItemList()) {
-				itemList.emplace_back(it.first, item);
-			}
-		}
-
-		if (!saveItems(player, itemList, depotQuery, propWriteStream)) {
-			return false;
-		}
-	}
-
-	//save inbox items
-	query.str(std::string());
-	query << "DELETE FROM `player_inboxitems` WHERE `player_id` = " << player->getGUID();
-	if (!db.executeQuery(query.str())) {
-		return false;
-	}
-
-	DBInsert inboxQuery("INSERT INTO `player_inboxitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
-	itemList.clear();
-
-	for (Item* item : player->getInbox()->getItemList()) {
-		itemList.emplace_back(0, item);
-	}
-
-	if (!saveItems(player, itemList, inboxQuery, propWriteStream)) {
-		return false;
-	}
+	g_playerCacheManager.cachePlayer(player->getGUID(), player);
 
 	query.str(std::string());
 	query << "DELETE FROM `player_storage` WHERE `player_id` = " << player->getGUID();
