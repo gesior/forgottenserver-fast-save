@@ -454,8 +454,9 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 		} while (result->next());
 	}
 
-
-	if (!g_playerCacheManager.loadCachedPlayer(player->getGUID(), player)) {
+	if (!g_config.getBoolean(ConfigManager::PLAYER_ITEMS_CACHE) ||
+		!g_playerCacheManager.loadCachedPlayer(player->getGUID(), player)) {
+		double s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 		//load inventory items
 		ItemMap itemMap;
 
@@ -548,8 +549,8 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 				}
 			}
 		}
-
-		g_playerCacheManager.cachePlayer(player->getGUID(), player);
+		double e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		std::cout << "----BENCH: old load player: " << (e - s) << std::endl;
 	}
 
 	//load storage map
@@ -784,7 +785,75 @@ bool IOLoginData::savePlayer(Player* player)
 		return false;
 	}
 
-	g_playerCacheManager.cachePlayer(player->getGUID(), player);
+	//item saving
+	if (g_config.getBoolean(ConfigManager::PLAYER_ITEMS_CACHE)) {
+		g_playerCacheManager.cachePlayer(player->getGUID(), player);
+	}
+	else {
+		double s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		query << "DELETE FROM `player_items` WHERE `player_id` = " << player->getGUID();
+		if (!db.executeQuery(query.str())) {
+			return false;
+		}
+
+		DBInsert itemsQuery("INSERT INTO `player_items` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
+
+		ItemBlockList itemList;
+		for (int32_t slotId = 1; slotId <= 10; ++slotId) {
+			Item* item = player->inventory[slotId];
+			if (item) {
+				itemList.emplace_back(slotId, item);
+			}
+		}
+
+		if (!saveItems(player, itemList, itemsQuery, propWriteStream)) {
+			return false;
+		}
+
+		if (player->lastDepotId != -1) {
+			//save depot items
+			query.str(std::string());
+			query << "DELETE FROM `player_depotitems` WHERE `player_id` = " << player->getGUID();
+
+			if (!db.executeQuery(query.str())) {
+				return false;
+			}
+
+			DBInsert depotQuery("INSERT INTO `player_depotitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
+			itemList.clear();
+
+			for (const auto& it : player->depotChests) {
+				DepotChest* depotChest = it.second;
+				for (Item* item : depotChest->getItemList()) {
+					itemList.emplace_back(it.first, item);
+				}
+			}
+
+			if (!saveItems(player, itemList, depotQuery, propWriteStream)) {
+				return false;
+			}
+		}
+
+		//save inbox items
+		query.str(std::string());
+		query << "DELETE FROM `player_inboxitems` WHERE `player_id` = " << player->getGUID();
+		if (!db.executeQuery(query.str())) {
+			return false;
+		}
+
+		DBInsert inboxQuery("INSERT INTO `player_inboxitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
+		itemList.clear();
+
+		for (Item* item : player->getInbox()->getItemList()) {
+			itemList.emplace_back(0, item);
+		}
+
+		if (!saveItems(player, itemList, inboxQuery, propWriteStream)) {
+			return false;
+		}
+		double e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		std::cout << "----BENCH: old save player: " << (e - s) << std::endl;
+	}
 
 	query.str(std::string());
 	query << "DELETE FROM `player_storage` WHERE `player_id` = " << player->getGUID();

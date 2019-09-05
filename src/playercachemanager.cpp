@@ -36,7 +36,10 @@ bool PlayerCacheManager::loadCachedPlayer(uint32_t guid, Player* player)
 	}
 
 	std::cout << "loadCachedPlayer, load cache: " << guid << std::endl;
+	double s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	playerCacheData->copyDataToPlayer(player);
+	double e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	std::cout << "----BENCH: copyDataToPlayer: " << (e - s) << std::endl;
 
 	return true;
 }
@@ -46,7 +49,11 @@ void PlayerCacheManager::cachePlayer(uint32_t guid, Player* player)
 	PlayerCacheData* playerCacheData = getCachedPlayer(guid, true);
 
 	std::cout << "cachePlayer, update cache: " << guid << std::endl;
+	std::cout << "loadCachedPlayer, load cache: " << guid << std::endl;
+	double s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	playerCacheData->copyDataFromPlayer(player);
+	double e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	std::cout << "----BENCH: copyDataFromPlayer: " << (e - s) << std::endl;
 	addToSaveList(guid);
 }
 
@@ -188,14 +195,20 @@ bool PlayerCacheManager::saveCachedItems(uint32_t guid)
 {
 	std::cout << "saveItems, guid: " << guid << std::endl;
 
+	double s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	PlayerCacheData* playerCacheData = getCachedPlayer(guid);
-
+	double e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	if (!playerCacheData) {
 		return false;
 	}
+	std::cout << "----BENCH: get cache: " << (e-s) << std::endl;
 
+	s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	PlayerCacheData* playerCacheDataClone = playerCacheData->clone();
+	e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	std::cout << "----BENCH: clone cache: " << (e - s) << std::endl;
 
+	s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	std::ostringstream query;
 	PropWriteStream propWriteStream;
 	//item saving
@@ -204,7 +217,7 @@ bool PlayerCacheManager::saveCachedItems(uint32_t guid)
 		return false;
 	}
 
-	DBInsert itemsQuery("INSERT INTO `player_items` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
+	DBInsert itemsQuery("INSERT INTO `player_items` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ", &db);
 
 	ItemBlockList itemList;
 	for (int32_t slotId = 1; slotId <= 10; ++slotId) {
@@ -227,7 +240,7 @@ bool PlayerCacheManager::saveCachedItems(uint32_t guid)
 			return false;
 		}
 
-		DBInsert depotQuery("INSERT INTO `player_depotitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
+		DBInsert depotQuery("INSERT INTO `player_depotitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ", &db);
 		itemList.clear();
 
 		for (const auto& it : playerCacheDataClone->depotChests) {
@@ -249,7 +262,7 @@ bool PlayerCacheManager::saveCachedItems(uint32_t guid)
 		return false;
 	}
 
-	DBInsert inboxQuery("INSERT INTO `player_inboxitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ");
+	DBInsert inboxQuery("INSERT INTO `player_inboxitems` (`player_id`, `pid`, `sid`, `itemtype`, `count`, `attributes`) VALUES ", &db);
 	itemList.clear();
 
 	for (Item* item : playerCacheDataClone->inbox->getItemList()) {
@@ -260,11 +273,13 @@ bool PlayerCacheManager::saveCachedItems(uint32_t guid)
 		return false;
 	}
 
+	e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	std::cout << "----BENCH: write to db: " << (e - s) << std::endl;
 
-	std::cout << "saveItems, start sleep, guid: " << guid << std::endl;
-	//Sleep(3000);
-	std::cout << "saveItems, stop sleep,guid: " << guid << std::endl;
-
+	s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	delete playerCacheDataClone;
+	e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	std::cout << "----BENCH: delete cache clone: " << (e - s) << std::endl;
 	return true;
 }
 
