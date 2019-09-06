@@ -35,11 +35,7 @@ bool PlayerCacheManager::loadCachedPlayer(uint32_t guid, Player* player)
 		return false;
 	}
 
-	std::cout << "loadCachedPlayer, load cache: " << guid << std::endl;
-	double s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	playerCacheData->copyDataToPlayer(player);
-	double e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-	std::cout << "----BENCH: copyDataToPlayer: " << (e - s) << std::endl;
 
 	return true;
 }
@@ -47,13 +43,7 @@ bool PlayerCacheManager::loadCachedPlayer(uint32_t guid, Player* player)
 void PlayerCacheManager::cachePlayer(uint32_t guid, Player* player)
 {
 	PlayerCacheData* playerCacheData = getCachedPlayer(guid, true);
-
-	std::cout << "cachePlayer, update cache: " << guid << std::endl;
-	std::cout << "loadCachedPlayer, load cache: " << guid << std::endl;
-	double s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	playerCacheData->copyDataFromPlayer(player);
-	double e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-	std::cout << "----BENCH: copyDataFromPlayer: " << (e - s) << std::endl;
 	addToSaveList(guid);
 }
 
@@ -61,14 +51,11 @@ PlayerCacheData* PlayerCacheManager::getCachedPlayer(uint32_t guid, bool autoCre
 {
 	PlayerCacheData* playerCacheData;
 
-	std::cout << "getCachedPlayer, guid: " << guid << std::endl;
 	listLock.lock();
 	auto it = playersCache.find(guid);
 	if (it == playersCache.end()) {
 		if (autoCreate) {
-			std::cout << "getCachedPlayer, not found cache: " << guid << std::endl;
 			playerCacheData = new PlayerCacheData();
-			std::cout << "getCachedPlayer, create cache: " << guid << std::endl;
 			playersCache.emplace(guid, playerCacheData);
 		}
 		else {
@@ -77,7 +64,6 @@ PlayerCacheData* PlayerCacheManager::getCachedPlayer(uint32_t guid, bool autoCre
 		}
 	}
 	else {
-		std::cout << "getCachedPlayer, found cache: " << guid << std::endl;
 		playerCacheData = it->second;
 	}
 
@@ -116,14 +102,12 @@ void PlayerCacheManager::threadMain()
 
 void PlayerCacheManager::addToSaveList(uint32_t guid)
 {
-	std::cout << "addToSaveList, guid: " << guid << std::endl;
 	bool signal = false;
 	listLock.lock();
 
-	if (getState() == THREAD_STATE_RUNNING) {
-		signal = toSaveList.empty();
-		toSaveList.emplace_back(guid);
-	}
+	signal = toSaveList.empty();
+	toSaveList.emplace_back(guid);
+
 	listLock.unlock();
 
 	if (signal) {
@@ -193,24 +177,17 @@ bool PlayerCacheManager::saveItems(uint32_t guid, const ItemBlockList& itemList,
 
 bool PlayerCacheManager::saveCachedItems(uint32_t guid)
 {
-	std::cout << "saveItems, guid: " << guid << std::endl;
-
-	double s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	PlayerCacheData* playerCacheData = getCachedPlayer(guid);
-	double e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	
 	if (!playerCacheData) {
 		return false;
 	}
-	std::cout << "----BENCH: get cache: " << (e-s) << std::endl;
 
-	s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	PlayerCacheData* playerCacheDataClone = playerCacheData->clone();
-	e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-	std::cout << "----BENCH: clone cache: " << (e - s) << std::endl;
 
-	s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	std::ostringstream query;
 	PropWriteStream propWriteStream;
+
 	//item saving
 	query << "DELETE FROM `player_items` WHERE `player_id` = " << guid;
 	if (!db.executeQuery(query.str())) {
@@ -273,13 +250,8 @@ bool PlayerCacheManager::saveCachedItems(uint32_t guid)
 		return false;
 	}
 
-	e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-	std::cout << "----BENCH: write to db: " << (e - s) << std::endl;
-
-	s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	delete playerCacheDataClone;
-	e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-	std::cout << "----BENCH: delete cache clone: " << (e - s) << std::endl;
+
 	return true;
 }
 

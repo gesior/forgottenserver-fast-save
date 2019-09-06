@@ -98,6 +98,7 @@ int main(int argc, char* argv[])
 	g_scheduler.join();
 	g_databaseTasks.join();
 	g_dispatcher.join();
+	std::cout << ">> Saving player items." << std::endl;
 	g_playerCacheManager.flush();
 	g_playerCacheManager.join();
 	return 0;

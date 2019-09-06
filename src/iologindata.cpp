@@ -456,7 +456,6 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 
 	if (!g_config.getBoolean(ConfigManager::PLAYER_ITEMS_CACHE) ||
 		!g_playerCacheManager.loadCachedPlayer(player->getGUID(), player)) {
-		double s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 		//load inventory items
 		ItemMap itemMap;
 
@@ -549,8 +548,6 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result)
 				}
 			}
 		}
-		double e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-		std::cout << "----BENCH: old load player: " << (e - s) << std::endl;
 	}
 
 	//load storage map
@@ -790,7 +787,6 @@ bool IOLoginData::savePlayer(Player* player)
 		g_playerCacheManager.cachePlayer(player->getGUID(), player);
 	}
 	else {
-		double s = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 		query << "DELETE FROM `player_items` WHERE `player_id` = " << player->getGUID();
 		if (!db.executeQuery(query.str())) {
 			return false;
@@ -851,8 +847,6 @@ bool IOLoginData::savePlayer(Player* player)
 		if (!saveItems(player, itemList, inboxQuery, propWriteStream)) {
 			return false;
 		}
-		double e = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-		std::cout << "----BENCH: old save player: " << (e - s) << std::endl;
 	}
 
 	query.str(std::string());
